@@ -270,6 +270,17 @@ func TestObjLen(t *testing.T) {
 	errorIfNotEqual(t, 0, L.ObjLen(LNumber(10)))
 }
 
+func TestObjSize(t *testing.T) {
+	L := NewState()
+	defer L.Close()
+
+	errorIfNotEqual(t, 16, LNil.Size())
+	errorIfNotEqual(t, 20, LString("1.23").Size())
+	errorIfNotEqual(t, 1, LBool(true).Size())
+	errorIfNotEqual(t, 8, LNumber(1.23).Size())
+
+}
+
 func TestConcat(t *testing.T) {
 	L := NewState()
 	defer L.Close()

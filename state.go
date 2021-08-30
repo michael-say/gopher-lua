@@ -65,6 +65,23 @@ const (
 
 /* }}} */
 
+/* MemoryCounter {{{ */
+
+type MemSizeCounter struct {
+	size  uint64
+	limit uint64
+}
+
+func (m *MemSizeCounter) plus(size uint64) {
+	m.size += size
+}
+
+func (m *MemSizeCounter) minus(size uint64) {
+	m.size -= size
+}
+
+/* }}} */
+
 /* ResumeState {{{ */
 
 type ResumeState int

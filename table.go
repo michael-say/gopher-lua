@@ -28,7 +28,7 @@ func (lv lValueArraySorter) Less(i, j int) bool {
 	return lessThan(lv.L, lv.Values[i], lv.Values[j])
 }
 
-func newLTable(acap int, hcap int) *LTable {
+func newLTable(acap int, hcap int, mc *MemSizeCounter) *LTable {
 	if acap < 0 {
 		acap = 0
 	}
@@ -43,6 +43,7 @@ func newLTable(acap int, hcap int) *LTable {
 	if hcap != 0 {
 		tb.strdict = make(map[string]LValue, hcap)
 	}
+	tb.memcounter = mc
 	return tb
 }
 
@@ -72,6 +73,9 @@ func (tb *LTable) Append(value LValue) {
 	}
 	if len(tb.array) == 0 || tb.array[len(tb.array)-1] != LNil {
 		tb.array = append(tb.array, value)
+		if tb.memcounter != nil {
+			tb.memcounter.plus(value.Size())
+		}
 	} else {
 		i := len(tb.array) - 2
 		for ; i >= 0; i-- {
@@ -80,6 +84,10 @@ func (tb *LTable) Append(value LValue) {
 			}
 		}
 		tb.array[i+1] = value
+		if tb.memcounter != nil {
+			tb.memcounter.minus(LNil.Size())
+			tb.memcounter.plus(value.Size())
+		}
 	}
 }
 
@@ -100,6 +108,9 @@ func (tb *LTable) Insert(i int, value LValue) {
 	tb.array = append(tb.array, LNil)
 	copy(tb.array[i+1:], tb.array[i:])
 	tb.array[i] = value
+	if tb.memcounter != nil {
+		tb.memcounter.plus(value.Size())
+	}
 }
 
 // MaxN returns a maximum number key that nil value does not exist before it.

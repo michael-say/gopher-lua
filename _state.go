@@ -61,6 +61,14 @@ const (
 
 /* }}} */
 
+/* MemoryCounter {{{ */
+
+type limitChecker interface {
+	check(limit uint64)
+}
+
+/* }}} */
+
 /* ResumeState {{{ */
 
 type ResumeState int

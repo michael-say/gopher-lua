@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"unsafe"
 )
 
 type LValueType int
@@ -20,6 +21,13 @@ const (
 	LTChannel
 )
 
+const (
+	sizeNil    = uint64(0)
+	sizeBool   = uint64(unsafe.Sizeof(true))
+	sizeString = uint64(unsafe.Sizeof(""))
+	sizeNumber = uint64(unsafe.Sizeof(float64(0)))
+)
+
 var lValueNames = [9]string{"nil", "boolean", "number", "string", "function", "userdata", "thread", "table", "channel"}
 
 func (vt LValueType) String() string {
@@ -29,6 +37,7 @@ func (vt LValueType) String() string {
 type LValue interface {
 	String() string
 	Type() LValueType
+	Size() uint64
 	// to reduce `runtime.assertI2T2` costs, this method should be used instead of the type assertion in heavy paths(typically inside the VM).
 	assertFloat64() (float64, bool)
 	// to reduce `runtime.assertI2T2` costs, this method should be used instead of the type assertion in heavy paths(typically inside the VM).
@@ -82,6 +91,7 @@ type LNilType struct{}
 
 func (nl *LNilType) String() string                     { return "nil" }
 func (nl *LNilType) Type() LValueType                   { return LTNil }
+func (nl *LNilType) Size() uint64                       { return sizeNil }
 func (nl *LNilType) assertFloat64() (float64, bool)     { return 0, false }
 func (nl *LNilType) assertString() (string, bool)       { return "", false }
 func (nl *LNilType) assertFunction() (*LFunction, bool) { return nil, false }
@@ -97,6 +107,7 @@ func (bl LBool) String() string {
 	return "false"
 }
 func (bl LBool) Type() LValueType                   { return LTBool }
+func (bl LBool) Size() uint64                       { return sizeBool }
 func (bl LBool) assertFloat64() (float64, bool)     { return 0, false }
 func (bl LBool) assertString() (string, bool)       { return "", false }
 func (bl LBool) assertFunction() (*LFunction, bool) { return nil, false }
@@ -108,6 +119,7 @@ type LString string
 
 func (st LString) String() string                     { return string(st) }
 func (st LString) Type() LValueType                   { return LTString }
+func (st LString) Size() uint64                       { return sizeString + uint64(len(string(st))) }
 func (st LString) assertFloat64() (float64, bool)     { return 0, false }
 func (st LString) assertString() (string, bool)       { return string(st), true }
 func (st LString) assertFunction() (*LFunction, bool) { return nil, false }
@@ -134,6 +146,7 @@ func (nm LNumber) String() string {
 }
 
 func (nm LNumber) Type() LValueType                   { return LTNumber }
+func (nm LNumber) Size() uint64                       { return sizeNumber }
 func (nm LNumber) assertFloat64() (float64, bool)     { return float64(nm), true }
 func (nm LNumber) assertString() (string, bool)       { return "", false }
 func (nm LNumber) assertFunction() (*LFunction, bool) { return nil, false }
@@ -161,15 +174,17 @@ func (nm LNumber) Format(f fmt.State, c rune) {
 type LTable struct {
 	Metatable LValue
 
-	array   []LValue
-	dict    map[LValue]LValue
-	strdict map[string]LValue
-	keys    []LValue
-	k2i     map[LValue]int
+	array      []LValue
+	dict       map[LValue]LValue
+	strdict    map[string]LValue
+	keys       []LValue
+	k2i        map[LValue]int
+	memcounter *MemSizeCounter
 }
 
 func (tb *LTable) String() string                     { return fmt.Sprintf("table: %p", tb) }
 func (tb *LTable) Type() LValueType                   { return LTTable }
+func (tb *LTable) Size() uint64                       { return tb.size }
 func (tb *LTable) assertFloat64() (float64, bool)     { return 0, false }
 func (tb *LTable) assertString() (string, bool)       { return "", false }
 func (tb *LTable) assertFunction() (*LFunction, bool) { return nil, false }
@@ -185,6 +200,7 @@ type LGFunction func(*LState) int
 
 func (fn *LFunction) String() string                     { return fmt.Sprintf("function: %p", fn) }
 func (fn *LFunction) Type() LValueType                   { return LTFunction }
+func (fn *LFunction) Size() uint64                       { return 0 } // TODO smm: implement
 func (fn *LFunction) assertFloat64() (float64, bool)     { return 0, false }
 func (fn *LFunction) assertString() (string, bool)       { return "", false }
 func (fn *LFunction) assertFunction() (*LFunction, bool) { return fn, true }
@@ -222,6 +238,7 @@ type LState struct {
 
 func (ls *LState) String() string                     { return fmt.Sprintf("thread: %p", ls) }
 func (ls *LState) Type() LValueType                   { return LTThread }
+func (ls *LState) Size() uint64                       { return 0 } // TODO smm: implement
 func (ls *LState) assertFloat64() (float64, bool)     { return 0, false }
 func (ls *LState) assertString() (string, bool)       { return "", false }
 func (ls *LState) assertFunction() (*LFunction, bool) { return nil, false }
@@ -234,6 +251,7 @@ type LUserData struct {
 
 func (ud *LUserData) String() string                     { return fmt.Sprintf("userdata: %p", ud) }
 func (ud *LUserData) Type() LValueType                   { return LTUserData }
+func (ud *LUserData) Size() uint64                       { return 0 } // TODO smm: implement
 func (ud *LUserData) assertFloat64() (float64, bool)     { return 0, false }
 func (ud *LUserData) assertString() (string, bool)       { return "", false }
 func (ud *LUserData) assertFunction() (*LFunction, bool) { return nil, false }
@@ -242,6 +260,7 @@ type LChannel chan LValue
 
 func (ch LChannel) String() string                     { return fmt.Sprintf("channel: %p", ch) }
 func (ch LChannel) Type() LValueType                   { return LTChannel }
+func (ch LChannel) Size() uint64                       { return 0 } // TODO smm: implement
 func (ch LChannel) assertFloat64() (float64, bool)     { return 0, false }
 func (ch LChannel) assertString() (string, bool)       { return "", false }
 func (ch LChannel) assertFunction() (*LFunction, bool) { return nil, false }
